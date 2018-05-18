@@ -20,21 +20,30 @@ coloredlogs.install(level="INFO")
 parser = argparse.ArgumentParser(prog="peck_and_log")
 parser.add_argument("-d", "--debug", help="Enable debug", action="store_true")
 parser.add_argument("--host", help="Host to peck", default="news.ycombinator.com")
+parser.add_argument("-a", "--app", help="Path to Firefox", default=os.path.expanduser("~/.tlscanary/cache/firefox-nightly_osx"))
+parser.add_argument("-s", "--sudo", help="Path to sudo", default="/usr/bin/sudo")
+parser.add_argument("-t", "--tcpdump", help="Path to tcpdump", default="/usr/sbin/tcpdump")
+parser.add_argument("--timeout", help="Connection timeout", default=10)
 
 args = parser.parse_args()
 
 if args.debug:
     coloredlogs.install(level='DEBUG')
 
-timeout = 30
-app = firefox_app.FirefoxApp("/Users/jcjones/.tlscanary/cache/firefox-nightly_osx")
+timeout = args.timeout
+app = firefox_app.FirefoxApp(args.app)
+
+logger.info("firefox binary: {}".format(app.exe))
+logger.info("sudo binary: {}".format(args.sudo))
+logger.info("tcpdump binary: {}".format(args.tcpdump))
+
 
 wakeup_cmd = xpcshell_worker.Command("wakeup")
 scan_cmd = xpcshell_worker.Command("scan", host=args.host, rank=None, include_certificates=False, timeout=timeout)
 
 is_running = True
 
-tcpdumpw = tcpdump_worker.TCPDumpWorker("/usr/sbin/tcpdump", sudo="/usr/bin/sudo")
+tcpdumpw = tcpdump_worker.TCPDumpWorker(args.tcpdump, sudo=args.sudo)
 
 total_count = 0
 failed_count = 0
