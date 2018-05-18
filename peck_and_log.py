@@ -1,9 +1,11 @@
+import argparse
 import subprocess
 import logging
 import coloredlogs
 import time
 import os
 import tempfile
+import shutil
 
 from tlscanary import xpcshell_worker, firefox_app, worker_pool
 import tcpdump_worker
@@ -17,12 +19,7 @@ coloredlogs.install(level="INFO")
 
 timeout = 30
 app = firefox_app.FirefoxApp("/Users/jcjones/.tlscanary/cache/firefox-nightly_osx")
-profile = "/tmp/profile_dir"
 host = "news.ycombinator.com"
-
-# Spawn a worker instance
-xpcw = xpcshell_worker.XPCShellWorker(app, profile=profile, prefs=None)
-xpcw.spawn()
 
 wakeup_cmd = xpcshell_worker.Command("wakeup")
 
@@ -36,8 +33,23 @@ total_count = 0
 failed_count = 0
 failed_pcaps = []
 
+parser = argparse.ArgumentParser(prog="peck_and_log")
+parser.add_argument("-d", "--debug", help="Enable debug", action="store_true")
+
+args = parser.parse_args()
+
+if args.debug:
+    coloredlogs.install(level='DEBUG')
+
 try:
   while is_running:
+
+    profile_dir = tempfile.mkdtemp()
+
+    # Spawn a worker instance
+    xpcw = xpcshell_worker.XPCShellWorker(app, profile=profile_dir, prefs=None)
+    xpcw.spawn()
+
     xpcw.send(scan_cmd)
     xpcw.send(wakeup_cmd)
 
@@ -81,14 +93,20 @@ try:
       failed_pcaps.append(pcap_file)
       failed_count += 1
 
+    # Wind down the worker
+    xpcw.send(xpcshell_worker.Command("quit"))
+    xpcw.terminate()
+
     # Wait between runs
     time.sleep(10.0)
+
+    # Clean up the old profile
+    logger.debug("Cleaning up profile directory {}".format(profile_dir))
+    shutil.rmtree(profile_dir)
+
 except KeyboardInterrupt:
     logger.critical("\nUser interrupt. Quitting...")
 
-# Wind down the worker
-xpcw.send(xpcshell_worker.Command("quit"))
-xpcw.terminate()
 
 logger.info("Failed pcap files:")
 for cap in failed_pcaps:
