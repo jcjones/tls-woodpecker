@@ -17,13 +17,20 @@ logger = logging.getLogger(__name__)
 coloredlogs.DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s"
 coloredlogs.install(level="INFO")
 
+parser = argparse.ArgumentParser(prog="peck_and_log")
+parser.add_argument("-d", "--debug", help="Enable debug", action="store_true")
+parser.add_argument("--host", help="Host to peck", default="news.ycombinator.com")
+
+args = parser.parse_args()
+
+if args.debug:
+    coloredlogs.install(level='DEBUG')
+
 timeout = 30
 app = firefox_app.FirefoxApp("/Users/jcjones/.tlscanary/cache/firefox-nightly_osx")
-host = "news.ycombinator.com"
 
 wakeup_cmd = xpcshell_worker.Command("wakeup")
-
-scan_cmd = xpcshell_worker.Command("scan", host=host, rank=None, include_certificates=False, timeout=timeout)
+scan_cmd = xpcshell_worker.Command("scan", host=args.host, rank=None, include_certificates=False, timeout=timeout)
 
 is_running = True
 
@@ -33,13 +40,6 @@ total_count = 0
 failed_count = 0
 failed_pcaps = []
 
-parser = argparse.ArgumentParser(prog="peck_and_log")
-parser.add_argument("-d", "--debug", help="Enable debug", action="store_true")
-
-args = parser.parse_args()
-
-if args.debug:
-    coloredlogs.install(level='DEBUG')
 
 try:
   while is_running:
@@ -58,7 +58,7 @@ try:
     temp_dir = tempfile.mkdtemp()
     _, pcap_file=tempfile.mkstemp(".pcap", dir=temp_dir)
 
-    tcpdumpw.start_session(pcap_file=pcap_file, host=host)
+    tcpdumpw.start_session(pcap_file=pcap_file, host=args.host)
 
     timeout_time = time.time() + timeout + 1
     while time.time() < timeout_time:
