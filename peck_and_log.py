@@ -1,15 +1,16 @@
 import argparse
-import subprocess
-import logging
 import coloredlogs
-import time
+import logging
 import os
-import tempfile
+import platform
 import shutil
+import subprocess
+import tempfile
+import time
+import traceback
 
 from tlscanary import xpcshell_worker, firefox_app, worker_pool
 import tcpdump_worker
-
 
 # Initialize coloredlogs
 logging.Formatter.converter = time.gmtime
@@ -17,10 +18,16 @@ logger = logging.getLogger(__name__)
 coloredlogs.DEFAULT_LOG_FORMAT = "%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s"
 coloredlogs.install(level="INFO")
 
+default_app = None
+if platform.system() == "Darwin":
+  default_app = os.path.expanduser("~/.tlscanary/cache/firefox-nightly_osx")
+elif platform.system() == "Linux":
+  default_app = os.path.expanduser("~/.tlscanary/cache/firefox-nightly_linux")
+
 parser = argparse.ArgumentParser(prog="peck_and_log")
 parser.add_argument("-d", "--debug", help="Enable debug", action="store_true")
 parser.add_argument("--host", help="Host to peck", default="news.ycombinator.com")
-parser.add_argument("-a", "--app", help="Path to Firefox", default=os.path.expanduser("~/.tlscanary/cache/firefox-nightly_osx"))
+parser.add_argument("-a", "--app", help="Path to Firefox", default=default_app)
 parser.add_argument("-s", "--sudo", help="Path to sudo", default="/usr/bin/sudo")
 parser.add_argument("-t", "--tcpdump", help="Path to tcpdump", default="/usr/sbin/tcpdump")
 parser.add_argument("--timeout", help="Connection timeout", default=10)
@@ -31,12 +38,22 @@ if args.debug:
     coloredlogs.install(level='DEBUG')
 
 timeout = args.timeout
-app = firefox_app.FirefoxApp(args.app)
+app = None
+
+try:
+  app = firefox_app.FirefoxApp(args.app)
+except Exception:
+  import sys
+  logger.error("{} doesn't appear to point to a copy of Firefox. You may want to do a".format(args.app))
+  logger.error("basic tlscanary run to ensure that you've a copy cached, which will appear")
+  logger.error("somewhere like {} .".format(default_app))
+  logger.error("For example:")
+  logger.error("  tlscanary scan -l 1")
+  sys.exit(1)
 
 logger.info("firefox binary: {}".format(app.exe))
 logger.info("sudo binary: {}".format(args.sudo))
 logger.info("tcpdump binary: {}".format(args.tcpdump))
-
 
 wakeup_cmd = xpcshell_worker.Command("wakeup")
 scan_cmd = xpcshell_worker.Command("scan", host=args.host, rank=None, include_certificates=False, timeout=timeout)
@@ -48,7 +65,6 @@ tcpdumpw = tcpdump_worker.TCPDumpWorker(args.tcpdump, sudo=args.sudo)
 total_count = 0
 failed_count = 0
 failed_pcaps = []
-
 
 try:
   while is_running:
@@ -116,7 +132,8 @@ try:
 
 except KeyboardInterrupt:
     logger.critical("\nUser interrupt. Quitting...")
-
+except:
+    logger.error(traceback.format_exc())
 
 logger.info("Failed pcap files:")
 for cap in failed_pcaps:
