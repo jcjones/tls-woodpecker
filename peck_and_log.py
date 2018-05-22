@@ -65,7 +65,8 @@ try:
     connection_okay = False
 
     temp_dir = tempfile.mkdtemp()
-    _, pcap_file=tempfile.mkstemp(".pcap", dir=temp_dir)
+    fd, pcap_file=tempfile.mkstemp(".pcap", dir=temp_dir)
+    os.close(fd) # We don't need it, and we don't want to hold the handle open
 
     tcpdumpw.start_session(pcap_file=pcap_file, host=args.host)
 
